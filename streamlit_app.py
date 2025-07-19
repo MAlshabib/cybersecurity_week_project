@@ -3,6 +3,7 @@ import pandas as pd
 import altair as alt
 import plotly.graph_objects as go
 import plotly.express as px
+import matplotlib.pyplot as plt
 
 # Configure Altair to use transparent backgrounds
 alt.themes.enable('dark')
@@ -403,6 +404,153 @@ elif tab == "Charts":
     )
     st.plotly_chart(sank_fig, use_container_width=True)
     st.markdown("</div>", unsafe_allow_html=True)
+
+    # Chart: Severity Distribution (Donut) for selected Attack Type
+    st.markdown("""<div class='chart-card'>
+    <div class='chart-title'>Severity Distribution for Attack Type</div>""", unsafe_allow_html=True)
+
+    attack_input = st.selectbox("Choose an Attack Type", sorted(df_filtered['Attack Type'].dropna().unique()), key="chart_severity_input")
+    severitys = df_filtered.loc[df_filtered['Attack Type'] == attack_input, 'Severity']
+    severity_dict = dict(severitys.value_counts().reindex(["High", "Medium", "Low"], fill_value=0))
+
+    labels = list(severity_dict.keys())
+    values = list(severity_dict.values())
+    colors = ['red', 'orange', 'green']
+
+    fig_donut = go.Figure(data=[go.Pie(
+        labels=labels,
+        values=values,
+        hole=0.5,
+        marker=dict(colors=colors),
+        sort=False,
+        direction='clockwise',
+        textinfo='percent+label'
+    )])
+    fig_donut.update_layout(
+        title_x=0.5,
+        showlegend=False,
+        margin=dict(t=20, b=0, l=0, r=0),
+        height=360,
+        annotations=[dict(text=attack_input, x=0.5, y=0.5, font_size=18, showarrow=False)],
+        paper_bgcolor='rgba(0,0,0,0)',
+        font=dict(color='#e2e8f0')
+    )
+    st.plotly_chart(fig_donut, use_container_width=True)
+    st.markdown("</div>", unsafe_allow_html=True)
+
+    # Chart: Most common attack type by selected attack source
+    st.markdown("""<div class='chart-card'>
+    <div class='chart-title'>Most Common Attack Type by Source</div>""", unsafe_allow_html=True)
+
+    source_input = st.selectbox("Choose an Attack Source", sorted(df_filtered['Attack Source'].dropna().unique()), key="chart_source_input")
+    top_type = df_filtered[df_filtered['Attack Source'] == source_input]['Attack Type'].value_counts().idxmax()
+    st.success(f"The most common attack done by **{source_input}** source is: **{top_type}**")
+    st.markdown("</div>", unsafe_allow_html=True)
+
+    # Chart: Bar chart of total financial loss per industry
+    st.markdown("""<div class='chart-card'>
+    <div class='chart-title'>Total Financial Loss per Industry</div>""", unsafe_allow_html=True)
+
+    industrys = list(df_filtered['Target Industry'].dropna().unique())
+    lost_industry = {ind: df_filtered[df_filtered['Target Industry'] == ind]['Financial Loss (in Million $)'].sum() for ind in industrys}
+    industrys_list = list(lost_industry.keys())
+    lost_list = list(lost_industry.values())
+
+    fig_loss, ax = plt.subplots(figsize=(10, 4))
+    ax.bar(industrys_list, lost_list, color='skyblue')
+    ax.set_xlabel('Target Industry', fontsize=10)
+    ax.set_ylabel('Financial Loss (in Million $)', fontsize=10)
+    ax.set_title('Total Financial Loss per Industry', fontsize=12)
+    ax.tick_params(axis='x', rotation=45, labelsize=8)
+    ax.tick_params(axis='y', labelsize=8)
+    plt.tight_layout()
+    st.pyplot(fig_loss)
+    st.markdown("</div>", unsafe_allow_html=True)
+
+    
+    # IDEA 1: Donut Chart - Critical Incidents by Attack Type
+    if 'Critical' in df.columns:
+        critical_data = df[df['Critical'] == True]['Attack Type'].value_counts()
+        if not critical_data.empty:
+            colors = plt.get_cmap('tab20c').colors
+            fig, ax = plt.subplots(figsize=(3, 2))
+            wedges, texts, autotexts = ax.pie(
+                critical_data,
+                labels=critical_data.index,
+                autopct='%1.1f%%',
+                startangle=90,
+                wedgeprops=dict(width=0.35),
+                colors=colors
+            )
+            ax.text(0, 0, f'{critical_data.sum()}\nCritical', ha='center', va='center', fontsize=14, fontweight='bold')
+            ax.set_title('Critical Incidents by Attack Type', fontsize=14)
+            plt.tight_layout()
+            st.pyplot(fig)
+        else:
+            st.info("No critical incidents found.")
+    else:
+        st.warning("Column 'Critical' not found in dataset.")
+
+    # IDEA 2: Pie chart of defense effectiveness
+    if 'Defense Effectiveness' in df.columns:
+        counts = df['Defense Effectiveness'].value_counts()
+        fig2, ax2 = plt.subplots(figsize=(6, 6))
+        colors = ['#2ecc71', '#e74c3c']
+        explode = (0.05, 0.05)
+        ax2.pie(counts, labels=counts.index, autopct='%1.1f%%',
+                colors=colors, startangle=90, explode=explode,
+                wedgeprops={'edgecolor': 'black'})
+        ax2.set_title('Defense Effectiveness', fontsize=14)
+        ax2.axis('equal')
+        plt.tight_layout()
+        st.pyplot(fig2)
+
+    # IDEA 3: Grouped bar chart of attack type vs severity
+    if 'Severity' in df.columns:
+        pivot = df.pivot_table(index='Attack Type', columns='Severity', aggfunc='size', fill_value=0)
+        # Make the image smaller
+        fig3 = pivot.plot(kind='bar', stacked=False, colormap='Set3').get_figure()
+        fig3.set_size_inches(8, 4)
+        plt.title('Attack Type vs Severity Level')
+        plt.xlabel('Attack Type')
+        plt.ylabel('Number of Incidents')
+        plt.xticks(rotation=45)
+        plt.tight_layout()
+        st.pyplot(fig3)
+
+    # IDEA 4: Defense Mechanism vs Effectiveness by Year
+    if 'Defense Effectiveness' in df.columns and 'Defense Mechanism Used' in df.columns and 'Year' in df.columns:
+        pivot_eff = df.pivot_table(index='Defense Mechanism Used', columns=['Defense Effectiveness', 'Year'], aggfunc='size', fill_value=0)
+        years = pivot_eff.columns.get_level_values('Year').unique()
+        for year in years:
+            data_for_year = pivot_eff.xs(key=year, level='Year', axis=1)
+            fig4 = data_for_year.plot(kind='bar', stacked=False, figsize=(4,6), colormap='Set2').get_figure()
+            plt.title(f'Defense Mechanism vs Effectiveness in {year}')
+            plt.xlabel('Defense Mechanism Used')
+            plt.ylabel('Number of Incidents')
+            plt.xticks(rotation=45)
+            plt.tight_layout()
+            st.pyplot(fig4)
+
+    # IDEA 5: (Removed)
+
+    # IDEA 6: Defense Mechanism vs Severity by Year
+    if 'Severity' in df.columns and 'Defense Mechanism Used' in df.columns and 'Year' in df.columns:
+        pivot_sev = df.pivot_table(index='Defense Mechanism Used', columns=['Severity', 'Year'], aggfunc='size', fill_value=0)
+        years = pivot_sev.columns.get_level_values('Year').unique()
+        for year in years:
+            data_for_year = pivot_sev.xs(key=year, level='Year', axis=1)
+            fig6 = data_for_year.plot(kind='bar', stacked=False, figsize=(6, 4), colormap='Set2').get_figure()
+            plt.title(f'🛡️ Defense Mechanism vs Severity in {year}')
+            plt.xlabel('Defense Mechanism Used')
+            plt.ylabel('Number of Incidents')
+            plt.xticks(rotation=45)
+            plt.tight_layout()
+            st.pyplot(fig6)
+
+
+
+
 
 # Module Tab
 elif tab == "Module":
