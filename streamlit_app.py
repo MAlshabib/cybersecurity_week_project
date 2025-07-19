@@ -16,10 +16,50 @@ def load_data():
 
 df = load_data()
 
+# 🎯 Flag Attacks with More Than 500K Users Affected and Long Resolution Time
+df['Critical'] = False
+
+for i, row in df.iterrows():
+    if row['Number of Affected Users'] > 500000 and row['Incident Resolution Time (in Hours)'] > 48:
+        df.at[i, 'Critical'] = True
+
 # Add Severity column based on Financial Loss
 df['Severity'] = df['Financial Loss (in Million $)'].apply(
     lambda loss: 'High' if loss > 70 else 'Medium' if loss > 40 else 'Low'
 )
+
+def classify_complexity(row):
+    if row['Security Vulnerability Type'] in ['Zero-day', 'Unpatched Software']:
+        return 'High'
+    elif row['Security Vulnerability Type'] in ['Weak Passwords']:
+        return 'Medium'
+    else:
+        return 'Low'
+
+# Why: Assign a simple tag based on attack type and vulnerability.
+# Insight: Helps distinguish between technically sophisticated vs. socially engineered attacks.
+def classify_complexity(row):
+    if row['Security Vulnerability Type'] in ['Zero-day', 'Unpatched Software']:
+        return 'High'
+    elif row['Security Vulnerability Type'] in ['Weak Passwords']:
+        return 'Medium'
+    else:
+        return 'Low'
+
+df['Attack Complexity'] = df.apply(classify_complexity, axis=1)
+
+
+# Why: Combine defense mechanism and resolution time to evaluate response.
+# Insight: Tells if defenses like VPN or Firewall are handling fast responses or not.
+df['Defense Effectiveness'] = df['Incident Resolution Time (in Hours)'].apply(lambda x: 'Effective' if x <= 24 else 'Ineffective')
+
+# Why: Categorize attacks by their entry vector (human vs. system).
+# Insight: Supports prevention strategy design.
+human_vectors = ['Social Engineering', 'Weak Passwords'] # can add more
+df['Attack Vector Type'] = df['Security Vulnerability Type'].apply(
+    lambda x: 'Human' if x in human_vectors else 'System'
+)
+
 
 # Page config
 st.set_page_config(page_title="Cybersecurity Dashboard", layout="wide")
@@ -473,7 +513,7 @@ elif tab == "Charts":
         critical_data = df[df['Critical'] == True]['Attack Type'].value_counts()
         if not critical_data.empty:
             colors = plt.get_cmap('tab20c').colors
-            fig, ax = plt.subplots(figsize=(3, 2))
+            fig, ax = plt.subplots(figsize=(8, 4))
             wedges, texts, autotexts = ax.pie(
                 critical_data,
                 labels=critical_data.index,
@@ -482,8 +522,8 @@ elif tab == "Charts":
                 wedgeprops=dict(width=0.35),
                 colors=colors
             )
-            ax.text(0, 0, f'{critical_data.sum()}\nCritical', ha='center', va='center', fontsize=14, fontweight='bold')
-            ax.set_title('Critical Incidents by Attack Type', fontsize=14)
+            ax.text(0, 0, f'{critical_data.sum()}\nCritical', ha='center', va='center', fontsize=16, fontweight='bold')
+            ax.set_title('Critical Incidents by Attack Type', fontsize=16)
             plt.tight_layout()
             st.pyplot(fig)
         else:
